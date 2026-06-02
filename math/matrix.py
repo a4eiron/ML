@@ -1,12 +1,17 @@
 from __future__ import annotations
+
 from typing import override
-from .vector import Vector
+
+from vector import Vector  # pyright: ignore[reportImplicitRelativeImport]
 
 
 class Matrix:
     elements: list[list[int | float]] = []
 
     def __init__(self, elements: list[list[int | float]]) -> None:
+        if not elements or not elements[0]:
+            raise ValueError("Matrix cannot be empty")
+
         row_len = len(elements[0])
         for i in range(1, len(elements)):
             if len(elements[i]) != row_len:
@@ -15,7 +20,11 @@ class Matrix:
 
     @override
     def __str__(self) -> str:
-        rows_str = ",\n ".join((str(row) for row in self.elements))
+        formatted_elements = [
+            [0.0 if abs(val) < 1e-9 else round(val, 4) for val in row]
+            for row in self.elements
+        ]
+        rows_str = ",\n ".join((str(row) for row in formatted_elements))
         return f"Matrix([\n {rows_str}\n])"
 
     def __len__(self) -> int:
@@ -39,6 +48,90 @@ class Matrix:
         return Matrix(
             [[row[j] for row in self.elements] for j in range(self.shape()[1])]
         )
+
+    def det(self) -> float:
+        num_rows, num_cols = self.shape()
+        if num_rows != num_cols:
+            raise ValueError("Determinant can only be calculated for square matrices")
+
+        matrix = [row[:] for row in self.elements]
+        n = num_rows
+        det = 1.0
+
+        # largest element in the column
+        for i in range(n):
+            max_row = i
+            for r in range(i + 1, n):
+                if abs(matrix[r][i]) > abs(matrix[max_row][i]):
+                    max_row = r
+
+            # if the pivot is veeeeery close to 0, the det is 0
+            if abs(matrix[max_row][i]) < 1e-9:
+                return 0.0
+
+            # if needed to swap rows, flip the sign of the det
+            if max_row != i:
+                matrix[i], matrix[max_row] = matrix[max_row], matrix[i]
+                det *= -1.0
+
+            # multiply the current diagonal element into our running total
+            det *= matrix[i][i]
+
+            # row elimination
+            for r in range(i + 1, n):
+                factor = matrix[r][i] / matrix[i][i]
+                matrix[r] = [
+                    current - factor * pivot
+                    for current, pivot in zip(matrix[r], matrix[i])
+                ]
+
+        return round(det, 6)
+
+    def inverse(self) -> Matrix:
+        num_rows, num_cols = self.shape()
+        if num_rows != num_cols:
+            raise ValueError(
+                "Maxtrix inversion is not possible for non-square matrices"
+            )
+
+        if self.det() == 0:
+            raise ValueError("Matrix is singular and cannot be inverted ")
+
+        # build the augmented matrix
+        augmented: list[list[int | float]] = []
+        for i in range(num_rows):
+            # i-th row of the identity matrix
+            identity_row = [1.0 if i == j else 0.0 for j in range(num_cols)]
+
+            augmented.append(self.elements[i] + identity_row)
+
+        # guass-jordan elimination on the augmented matrix
+        n = num_rows
+        for i in range(n):
+            max_row = i
+            for r in range(i + 1, n):
+                if abs(augmented[r][i]) > abs(augmented[max_row][i]):
+                    max_row = r
+
+            augmented[i], augmented[max_row] = augmented[max_row], augmented[i]
+
+            pivot_val = augmented[i][i]
+            augmented[i] = [val / pivot_val for val in augmented[i]]
+
+            for r in range(n):
+                if r != i:
+                    factor = augmented[r][i]
+                    augmented[r] = [
+                        current - factor * pivot
+                        for current, pivot in zip(augmented[r], augmented[i])
+                    ]
+
+        inverse_elements = [
+            [0.0 if abs(val) < 1e-9 else round(val, 6) for val in row[num_cols:]]
+            for row in augmented
+        ]
+
+        return Matrix(inverse_elements)
 
     def __add__(self, other: Matrix) -> Matrix:
         if self.shape() != other.shape():

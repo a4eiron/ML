@@ -8,6 +8,8 @@ class Vector:
     elements: list[int | float] = []
 
     def __init__(self, elements: list[int | float]) -> None:
+        if not elements:
+            raise ValueError("Vector cannot be empty")
         self.elements = elements
 
     @override
